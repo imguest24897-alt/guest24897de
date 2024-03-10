@@ -1,0 +1,124 @@
+#!/usr/bin/python3
+
+import tkinter as tk
+from tkinter import filedialog
+import os
+import glob
+from datetime import datetime
+
+class SimpleDE:
+    def __init__(self, root):
+        self.root = root
+        self.root.attributes('-fullscreen', True)  # Make the window full screen
+        os.system('xfwm4 &')  # Launch xfwm4 window manager
+        self.create_menu()
+        self.create_widgets()
+        self.create_taskbar()
+        self.applications_dir = "/usr/share/applications/"
+        self.populate_start_menu()
+        self.update_clock()
+
+    def create_menu(self):
+        menubar = tk.Menu(self.root)
+        file_menu = tk.Menu(menubar, tearoff=0)
+        file_menu.add_command(label="Open File", command=self.open_file)
+        file_menu.add_separator()
+        file_menu.add_command(label="Exit", command=self.root.quit)
+        menubar.add_cascade(label="File", menu=file_menu)
+        self.root.config(menu=menubar)
+
+    def create_widgets(self):
+        self.text_area = tk.Text(self.root, wrap="word")
+        self.text_area.pack(fill="both", expand=True)
+
+    def create_taskbar(self):
+        self.taskbar_frame = tk.Frame(self.root, bg="gray")
+        self.taskbar_frame.pack(side=tk.BOTTOM, fill=tk.X)
+
+        self.start_menu = tk.Listbox(self.root)
+        self.start_menu_button = tk.Button(self.taskbar_frame, text="Start Menu", command=self.open_start_menu)
+        self.start_menu_button.pack(side=tk.LEFT)
+
+        self.clock_label = tk.Label(self.taskbar_frame, text="", font=("Arial", 12), bg="gray", fg="white")
+        self.clock_label.pack(side=tk.RIGHT)
+
+    def populate_start_menu(self):
+        desktop_files = glob.glob(os.path.join(self.applications_dir, "*.desktop"))
+        self.applications = {}  # Dictionary to store application names and commands
+        for desktop_file in desktop_files:
+            with open(desktop_file, "r") as file:
+                lines = file.readlines()
+                app_name = None
+                app_command = None
+                for line in lines:
+                    if line.startswith("Name="):
+                        app_name = line.split("=")[1].strip()
+                    elif line.startswith("Exec="):
+                        app_command = line.split("=")[1].strip()
+                    elif line.startswith("Hidden=true"):
+                        app_name = None
+                        break
+                if app_name is not None and app_command is not None:
+                    self.applications[app_name] = app_command
+                    self.start_menu.insert(tk.END, app_name)
+
+    def update_clock(self):
+        now = datetime.now()
+        current_time = now.strftime("%H:%M:%S")
+        self.clock_label.config(text=current_time)
+        self.root.after(1000, self.update_clock)
+
+    def open_file(self):
+        file_path = filedialog.askopenfilename()
+        if file_path:
+            with open(file_path, "r") as file:
+                content = file.read()
+                self.text_area.delete("1.0", tk.END)
+                self.text_area.insert("1.0", content)
+
+    def open_start_menu(self):
+        top = tk.Toplevel()
+        top.title("Start Menu")
+
+        entry = tk.Entry(top)
+        entry.pack(fill=tk.X)
+
+        scrollbar = tk.Scrollbar(top, orient=tk.VERTICAL)
+        scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+
+        self.start_menubox = tk.Listbox(top, yscrollcommand=scrollbar.set)
+        scrollbar.config(command=self.start_menubox.yview)
+
+        for item in self.start_menu.get(0, tk.END):
+            self.start_menubox.insert(tk.END, item)
+
+        entry.bind('<KeyRelease>', self.filter_items)
+
+        self.start_menubox.pack(fill=tk.BOTH, expand=True)
+
+        self.start_menubox.bind('<<ListboxSelect>>', self.launch_application)
+
+    def filter_items(self, event):
+        query = event.widget.get().lower()
+        self.start_menubox.delete(0, tk.END)
+        for item in self.start_menu.get(0, tk.END):
+            if query in item.lower():
+                self.start_menubox.insert(tk.END, item)
+
+    def launch_application(self, event):
+        selected_index = self.start_menubox.curselection()
+        if selected_index:
+            selected_item = self.start_menubox.get(selected_index)
+            if selected_item in self.applications:
+                app_command = self.applications[selected_item]
+                os.system(app_command)
+
+def main():
+    root = tk.Tk()
+    root.attributes('-topmost', False)  # Ensure the window is not always on top
+    root.geometry("{0}x{1}+0+0".format(root.winfo_screenwidth(), root.winfo_screenheight()))
+    app = SimpleDE(root)
+    root.mainloop()
+
+if __name__ == "__main__":
+    main()
